@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>charmstack v.01 - a visual experiment by BÜRO CACHE</title>
 <meta name="description" content="Build and animate bag-charm stacks in 3D. A visual experiment by BÜRO CACHE.">
 <meta property="og:title" content="charmstack">
@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{color-scheme:light;--c0:#ff2d2d;--c1:#ff8fb1;--c2:#c9b8ff}
+*{touch-action:manipulation}
 html,body{margin:0;height:100%;background:#fff;color:#222;font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
 #toast{position:fixed;left:50%;top:max(34px,calc(env(safe-area-inset-top,0px) + 22px));transform:translateX(-50%);font-size:11px;color:#999;z-index:4;pointer-events:none;opacity:0;transition:opacity .3s;text-align:center}#toast.show{opacity:1}
 canvas{position:fixed;left:0;top:0;z-index:0;display:block;width:100%;height:100%;height:100dvh;touch-action:none;cursor:grab}
@@ -111,7 +112,7 @@ $('undo').onclick=()=>api.undo();$('del').onclick=()=>api.del();$('clear').oncli
 const IC={"phys": "<path d=\"M13.5 3 9 13\"/><circle cx=\"7.5\" cy=\"16.5\" r=\"3.5\"/><path d=\"M16.5 18.5a8 8 0 0 0 3-5\"/>", "sway": "<path d=\"M3 9c3-4 6-4 9 0s6 4 9 0\"/><path d=\"M3 16c3-4 6-4 9 0s6 4 9 0\"/>", "box": "<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"1\"/>", "corner": "<path d=\"M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5\"/>", "flow": "<path d=\"M12 3C8 8 6 11 6 14a6 6 0 0 0 12 0c0-3-2-6-6-11z\"/>", "mini": "<circle cx=\"12\" cy=\"5\" r=\"2\"/><circle cx=\"12\" cy=\"12\" r=\"2.6\"/><circle cx=\"12\" cy=\"19\" r=\"1.6\"/>"};
 [['phys','Physics'],['sway','Sway'],['box','Frames'],['corner','Corners'],['flow','Color flow'],['mini','Mini charms']].forEach(([k,l])=>{const b=document.createElement('button');b.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+IC[k]+'</svg>';b.title=l;b.setAttribute('aria-label',l);b.className=(anim[k]?'on ':'')+'icb';b.onclick=()=>{anim[k]=!anim[k];b.classList.toggle('on',anim[k]);if(k==='mini')api.minis()};$('anim').appendChild(b)});
 const snd=(()=>{
- let ctx,master,delayIn,verbIn,crush,noise,drone=null,on=false,voices=0,lastT={},lastM=0;
+ let ctx,master,delayIn,verbIn,crush,noise,drone=null,on=false,voices=0,lastT={},lastM=0,qs=0;
  const STEP=60/104/4,MIN={box:.08,corner:.05,hit:.07,add:0,del:.05,kick:.05,glitch:.3},SC=[0,2,3,5,7,8,10];
  const fr=d=>{d=Math.max(0,Math.min(20,d|0));return 440*Math.pow(2,(53+SC[d%7]+12*Math.floor(d/7)-69)/12)};
  function init(){
@@ -170,6 +171,8 @@ const snd=(()=>{
  return{active:()=>on,
   toggle(){if(!ctx)init();ctx.resume();on=!on;const t=ctx.currentTime;
    if(on){master.gain.setTargetAtTime(.8,t,.05);startDrone();genStart()}else{master.gain.setTargetAtTime(0,t,.15);stopDrone();genStop()}return on},
+  quiet(){if(!ctx||!on)return;const t=ctx.currentTime;master.gain.cancelScheduledValues(t);master.gain.setValueAtTime(master.gain.value,t);master.gain.linearRampToValueAtTime(0,t+.04);const k=++qs;setTimeout(()=>{if(k===qs){try{ctx.suspend()}catch(e){}}},90)},
+  wake(){qs++;if(!ctx||!on)return;try{ctx.resume()}catch(e){}const t=ctx.currentTime;master.gain.cancelScheduledValues(t);master.gain.setValueAtTime(0,t);master.gain.setTargetAtTime(.8,t,.15)},
   shapes(l){shp=l},
   motion(e,n){if(!on||!drone)return;dens=Math.min(1,.3+(n||0)*.04+e*.35);const t=ctx.currentTime;if(t-lastM<.1)return;lastM=t;drone.f.frequency.setTargetAtTime(320+e*280,t,.5)},
   ev(type,o){if(!on||voices>10)return;const now=ctx.currentTime;if(now-(lastT[type]||0)<(MIN[type]||0))return;lastT[type]=now;
@@ -182,6 +185,8 @@ const snd=(()=>{
 const PN=['Color','Depth','Height','Position','Wireframe','Motion']
 const ORD=[0,5,1,2,3,4];
 $('pass').onclick=()=>{view.pass=ORD[(ORD.indexOf(view.pass)+1)%ORD.length];$('pass').textContent='◐ '+PN[view.pass]};
+document.addEventListener('visibilitychange',()=>{document.hidden?snd.quiet():snd.wake()});
+addEventListener('pagehide',()=>snd.quiet());addEventListener('pageshow',e=>{if(e.persisted)snd.wake()});
 $('snd').onclick=()=>{$('snd').classList.toggle('on',snd.toggle())};
 $('tog').onclick=()=>{const c=document.querySelector('.panel').classList.toggle('collapsed');$('tog').textContent=c?'▴ Menu':'▾ Hide'};
 syncUI();
@@ -393,7 +398,7 @@ let VW=innerWidth,VH=innerHeight,offY=0,vOff=0,zf=1,pR={top:innerHeight,width:0,
 const pm=()=>{pR=$('pnl').getBoundingClientRect()};
 if(typeof ResizeObserver!=='undefined')new ResizeObserver(pm).observe($('pnl'));
 function applyView(dt){if(typeof ResizeObserver==='undefined')pm();
- const narrow=pR.width>VW*.6||VW<VH,cover=narrow?Math.max(0,Math.min(VH*.6,VH-pR.top)):0,open=cover>120,f=open?Math.min(1.4,1+(VH/Math.max(VH-cover,VH*.4)-1)*.6):1;
+ const narrow=true,cover=narrow?Math.max(0,Math.min(VH*.6,VH-pR.top)):0,open=cover>120,f=open?Math.min(1.4,1+(VH/Math.max(VH-cover,VH*.4)-1)*.6):1;
  const key=[narrow,Math.round(cover),VW,VH,depth.toFixed(2)].join();
  if(key!==aKey){aKey=key;
   if(!narrow){aTgt=0;aF=1}else{
@@ -413,10 +418,10 @@ async function saveBlob(blob,name){let d=null;try{d=await claude.use('downloads'
  if(d){try{await d.save({filename:name,data:blob})}catch(e){if(!e||e.code!=='declined')note('Save failed: '+((e&&e.code)||'error'))}return}
  const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
 const placeCam=(cam,r)=>{cam.position.set(Math.sin(ang)*Math.cos(elev)*r,cy+Math.sin(elev)*r,Math.cos(ang)*Math.cos(elev)*r);cam.lookAt(0,cy,0);cam.updateMatrixWorld(true)};
-function frameClock(cam,w,h){let rE=Math.max(6,depth*1.5+3)*(w/h<.6?1.5:w<h?1.35:1);
+function frameClock(cam,w,h,a,b){let rE=Math.max(6,depth*1.5+3)*(w/h<.6?1.5:w<h?1.35:1);
  cam.aspect=w/h;cam.clearViewOffset();cam.updateProjectionMatrix();placeCam(cam,rE);
  const meas=()=>{rv.set(rig.position.x,rig.position.y+.35,rig.position.z).project(cam);const yT=(1-rv.y)/2*h;let yB=yT;strands.forEach(s=>{s.ball.getWorldPosition(rb);rb.project(cam);yB=Math.max(yB,(1-rb.y)/2*h+h*.006)});return[yT,yB]};
- let [yT,yB]=meas();const rt=h*.31,rh=h*.93-rt;
+ let [yT,yB]=meas();const rt=h*(a==null?.31:a),rh=h*(b==null?.93:b)-rt;
  if(yB-yT>rh){rE*=(yB-yT)/rh;placeCam(cam,rE);[yT,yB]=meas()}
  cam.setViewOffset(w,h,0,yT-(rt+(rh-(yB-yT))*.5),w,h);cam.updateProjectionMatrix();return rE}
 function snap(w,h,name,clock){
@@ -424,7 +429,7 @@ function snap(w,h,name,clock){
  R.setPixelRatio(1);R.setSize(w,h,false);C.aspect=w/h;C.clearViewOffset();C.updateProjectionMatrix();R.setClearColor(0xffffff,1);
  all().forEach(m=>{const u=m.userData.corners.material.uniforms.uPx;ups.push([u,u.value]);u.value=w/ow});
  if(hl)hl.visible=false;
- if(clock)rE=frameClock(C,w,h);else placeCam(C,rE);
+ rE=clock?frameClock(C,w,h):frameClock(C,w,h,.08,.92);
  U_PASS.uNear.value=rE-1.8;U_PASS.uFar.value=rE+1.8;R.render(S,C);
  cv.toBlob(b=>{if(b)saveBlob(b,name)},'image/png');
  ups.forEach(([u,v])=>u.value=v);if(hl)hl.visible=hv;R.setPixelRatio(pr);R.setClearColor(0xffffff,1);R.setSize(VW,VH,false);C.aspect=VW/VH;C.position.copy(cp);C.quaternion.copy(cq);
