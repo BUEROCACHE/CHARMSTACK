@@ -116,7 +116,7 @@ const snd=(()=>{
  const STEP=60/104/4,MIN={box:.08,corner:.05,hit:.07,add:0,del:.05,kick:.05,glitch:.3},SC=[0,2,3,5,7,8,10];
  const fr=d=>{d=Math.max(0,Math.min(20,d|0));return 440*Math.pow(2,(53+SC[d%7]+12*Math.floor(d/7)-69)/12)};
  function init(){
-  ctx=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'playback'});
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
   master=ctx.createGain();master.gain.value=0;
   const comp=ctx.createDynamicsCompressor();comp.threshold.value=-16;comp.ratio.value=5;comp.attack.value=.004;comp.release.value=.15;
   master.connect(comp);comp.connect(ctx.destination);
@@ -140,8 +140,8 @@ const snd=(()=>{
   o.connect(lp);lp.connect(g);route(g,pan,.4,.12,cr);o.start(t);o.stop(t+.18);fin(o)}
  function tick(t,pan,v,lo,fx,nc){const s=ctx.createBufferSource(),g=ctx.createGain(),hp=ctx.createBiquadFilter();s.buffer=noise;hp.type='highpass';hp.frequency.value=fx!=null?3500+fx*4000:lo?2800+Math.random()*1800:5000+Math.random()*4000;
   g.gain.setValueAtTime(.2*v,t);g.gain.exponentialRampToValueAtTime(.001,t+(lo?.06:.035));s.connect(hp);hp.connect(g);route(g,pan,.45,.04,fx!=null?false:(!nc&&Math.random()<.4));s.start(t,fx!=null?fx*.8:Math.random()*.8,.05);fin(s)}
- function bell(t,f,pan,v,ratio){f=Math.min(f,1500);const c=ctx.createOscillator(),m=ctx.createOscillator(),mg=ctx.createGain(),g=ctx.createGain();c.frequency.value=f;m.frequency.value=f*((ratio!=null?ratio:2+Math.floor(Math.random()*3))+.01);
-  mg.gain.setValueAtTime(f*2.5,t);mg.gain.exponentialRampToValueAtTime(f*.05,t+.6);m.connect(mg);mg.connect(c.frequency);
+ function bell(t,f,pan,v,ratio){while(f>700)f/=2;const c=ctx.createOscillator(),m=ctx.createOscillator(),mg=ctx.createGain(),g=ctx.createGain();c.frequency.value=f;m.frequency.value=f*((ratio!=null?ratio:2+Math.floor(Math.random()*3))+.01);
+  mg.gain.setValueAtTime(Math.min(f*2.5,1200),t);mg.gain.exponentialRampToValueAtTime(f*.05,t+.6);m.connect(mg);mg.connect(c.frequency);
   g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12*v,t+.004);g.gain.exponentialRampToValueAtTime(.0008,t+1.3);
   c.connect(g);route(g,pan,.5,.55,false);c.start(t);m.start(t);c.stop(t+1.4);m.stop(t+1.4);fin(c)}
  function thud(t,f,pan,v){const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(f*2.2,t);o.frequency.exponentialRampToValueAtTime(f,t+.08);
@@ -171,7 +171,7 @@ const snd=(()=>{
  return{active:()=>on,
   toggle(){if(!ctx)init();ctx.resume();on=!on;const t=ctx.currentTime;
    if(on){master.gain.setTargetAtTime(.8,t,.05);startDrone();genStart()}else{master.gain.setTargetAtTime(0,t,.15);stopDrone();genStop()}return on},
-  quiet(){if(!ctx||!on)return;const t=ctx.currentTime;master.gain.cancelScheduledValues(t);master.gain.setValueAtTime(master.gain.value,t);master.gain.linearRampToValueAtTime(0,t+.04);const k=++qs;setTimeout(()=>{if(k===qs){try{ctx.suspend()}catch(e){}}},90)},
+  quiet(){if(!ctx||!on)return;const t=ctx.currentTime;master.gain.cancelScheduledValues(t);master.gain.setValueAtTime(master.gain.value,t);master.gain.linearRampToValueAtTime(0,t+.012);const k=++qs;setTimeout(()=>{if(k===qs){try{ctx.suspend()}catch(e){}}},40)},
   wake(){qs++;if(!ctx||!on)return;try{ctx.resume()}catch(e){}const t=ctx.currentTime;master.gain.cancelScheduledValues(t);master.gain.setValueAtTime(0,t);master.gain.setTargetAtTime(.8,t,.15)},
   shapes(l){shp=l},
   motion(e,n){if(!on||!drone)return;dens=Math.min(1,.3+(n||0)*.04+e*.35);const t=ctx.currentTime;if(t-lastM<.1)return;lastM=t;drone.f.frequency.setTargetAtTime(320+e*280,t,.5)},
@@ -186,7 +186,7 @@ const PN=['Color','Depth','Height','Position','Wireframe','Motion']
 const ORD=[0,5,1,2,3,4];
 $('pass').onclick=()=>{view.pass=ORD[(ORD.indexOf(view.pass)+1)%ORD.length];$('pass').textContent='◐ '+PN[view.pass]};
 document.addEventListener('visibilitychange',()=>{document.hidden?snd.quiet():snd.wake()});
-addEventListener('pagehide',()=>snd.quiet());addEventListener('pageshow',e=>{if(e.persisted)snd.wake()});
+addEventListener('pagehide',()=>snd.quiet());document.addEventListener('freeze',()=>snd.quiet());document.addEventListener('resume',()=>snd.wake());addEventListener('pageshow',e=>{if(e.persisted)snd.wake()});
 $('snd').onclick=()=>{$('snd').classList.toggle('on',snd.toggle())};
 $('tog').onclick=()=>{const c=document.querySelector('.panel').classList.toggle('collapsed');$('tog').textContent=c?'▴ Menu':'▾ Hide'};
 syncUI();
@@ -337,7 +337,7 @@ function physStep(h){const L=chains(),hh=h*h,rg=rig.position,nowC=new Set(),hits
    ax=Math.cos(o.az)*SPREAD*c.k+wx,az=-Math.sin(o.az)*SPREAD*c.k+wz;
   c.nodes.forEach(n=>{if(n.fixed){n.x=n.px=rg.x;n.y=n.py=rg.y;n.z=n.pz=rg.z;return}
    if(n.pin){n.px=n.x;n.py=n.y;n.pz=n.z;return}
-   const vx=(n.x-n.px)*DAMP,vy=(n.y-n.py)*DAMP,vz=(n.z-n.pz)*DAMP;n.px=n.x;n.py=n.y;n.pz=n.z;
+   let vx=(n.x-n.px)*DAMP,vy=(n.y-n.py)*DAMP,vz=(n.z-n.pz)*DAMP;const v2=vx*vx+vy*vy+vz*vz;if(v2>.09){const k=.3/Math.sqrt(v2);vx*=k;vy*=k;vz*=k}n.px=n.x;n.py=n.y;n.pz=n.z;
    n.x+=vx+ax*hh;n.y+=vy-G*hh;n.z+=vz+az*hh})});
  const items=[];L.forEach((c,ci)=>c.nodes.forEach((n,i)=>{if(n.r>.05)items.push([n,ci,i])}));
  for(let it=0;it<8;it++){
@@ -356,6 +356,8 @@ function physStep(h){const L=chains(),hh=h*h,rg=rig.position,nowC=new Set(),hits
 function fillLine(line,NP,nodes,ry){const pos=line.geometry.attributes.position,n=nodes.length;
  for(let k=0;k<NP;k++){const u=k/(NP-1)*(n-1),i=Math.min(n-2,Math.floor(u)),f=u-i,a=nodes[i],b=nodes[i+1];
   pos.setXYZ(k,a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f-ry,a.z+(b.z-a.z)*f)}pos.needsUpdate=true}
+let wdT=0;
+const physBad=()=>strands.some(s=>(s.en&&!isFinite(s.en.x+s.en.y+s.en.z))||s.shapes.some(m=>{const n=m.userData.node;return n&&!isFinite(n.x+n.y+n.z)}));
 function physApply(dt){const ry=rig.position.y;
  strands.forEach(s=>{if(!s.an||!s.en)return;const nodes=[s.an,...s.shapes.map(m=>m.userData.node),s.en];if(nodes.some(n=>!n))return;
   s.shapes.forEach((m,i)=>{const d=m.userData,n=d.node,a=nodes[i],b=nodes[i+2];d.drop+=(0-d.drop)*Math.min(1,dt*8);
@@ -506,7 +508,9 @@ function frame(now){
   d.cp=Math.max(0,Math.min(1,(d.cp||0)+(d.mode==='corner'?1:-1)*dt/.55));
   const x=d.cp,uu=d.corners.material.uniforms;d.corners.visible=x>.002;
   uu.uK.value=1;uu.uO.value=x*x*(3-2*x)});
- if(physOn){pacc+=dt;let k=0;while(pacc>=H&&k<3){physStep(H);pacc-=H;k++}if(k===3)pacc=0;physApply(dt)}
+ if(physOn){pacc+=dt;let k=0;while(pacc>=H&&k<3){physStep(H);pacc-=H;k++}if(k===3)pacc=0;physApply(dt);
+  if(energy>3&&!drag)wdT+=dt;else wdT=Math.max(0,wdT-dt*2);
+  if(wdT>8||physBad()){wdT=0;physInit()}}
  snd.motion(physOn?Math.min(1,energy/2):(anim.sway?.35:.1),ms.length);
  shapeT-=dt;if(shapeT<=0){shapeT=.5;if(snd.active())snd.shapes(ms.map(m=>{m.getWorldPosition(wv);return{deg:Math.round((wv.y-rig.position.y+7)*1.6),pan:Math.max(-1,Math.min(1,(wv.x*Math.cos(ang)-wv.z*Math.sin(ang))/3))}}))}
  if(sel&&hl){hl.setFromObject(sel)}
@@ -515,8 +519,11 @@ function frame(now){
   ms.forEach(m=>{if(m.userData.mode!=='none')nm++;poly+=tri(m.geometry)});
   strands.forEach(s=>{poly+=tri(s.ball.geometry)});
   minis.forEach(mn=>{poly+=tri(mn.ball.geometry)+mn.beads.length*tri(BEADG)});
+  const sd=(()=>{let h=2166136261;const mix=x=>{x=String(x);for(let i=0;i<x.length;i++){h^=x.charCodeAt(i);h=Math.imul(h,16777619)>>>0}h^=124;h=Math.imul(h,16777619)>>>0};
+   mix(strands.length);strands.forEach(st=>{mix('|'+st.shapes.length);st.shapes.forEach(m=>{const d=m.userData,q=d.p;mix(d.kind);mix(Math.round(q.size*100));mix(Math.round(q.tilt*1000));mix(Math.round(q.rot*1000));mix(q.c.join())})});
+   const x=h.toString(16).toUpperCase().padStart(8,'0');return x.slice(0,4)+'-'+x.slice(4)})();
   const row=(k,v)=>k.padEnd(12)+v,nu=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
-  const txt=['v.01','',row('charms',ms.length),row('strands',strands.length+(minis.length?' + '+minis.length:'')),row('marked',nm+' / '+ms.length),row('polygons',nu(poly))].join('\n');
+  const txt=['v.01','',row('charms',ms.length),row('strands',strands.length+(minis.length?' + '+minis.length:'')),row('marked',nm+' / '+ms.length),row('polygons',nu(poly)),row('seed',sd)].join('\n');
   if(txt!==statTxt){statTxt=txt;$('st').textContent=txt}}
  applyView(dt);
  const tr=Math.max(6,depth*1.5+3)*(VW<VH?1.35:1)*zf;
